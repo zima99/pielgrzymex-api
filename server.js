@@ -1,16 +1,16 @@
+require('dotenv').config(); // <--- TO MUSI BYĆ PIERWSZE
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const mongoose = require('mongoose');
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(bodyParser.json());
 
-// !!! WAŻNE: Podmień <password> na swoje hasło !!!
-const MONGO_URI ='mongodb+srv://admin:admin123@pielgrzymex.eb8hj85.mongodb.net/?appName=pielgrzymex';
+const MONGO_URI = process.env.MONGO_URI;
 
 mongoose.connect(MONGO_URI)
   .then(() => console.log('✅ Połączono z MongoDB!'))
