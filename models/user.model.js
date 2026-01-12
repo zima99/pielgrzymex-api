@@ -24,12 +24,14 @@ const userSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
-// 🔒 Automatyczne hashowanie hasła przed zapisem
-userSchema.pre('save', async function(next) {
-  if (!this.isModified('password')) return next();
+// 🔒 POPRAWIONE: Usunęliśmy 'next' z nawiasów i ze środka
+userSchema.pre('save', async function() {
+  // Jeśli hasło nie było zmieniane, nic nie rób
+  if (!this.isModified('password')) return;
+
+  // Hashowanie hasła
   const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(this.password, salt);
-  next();
 });
 
 // 🔑 Metoda do sprawdzania hasła przy logowaniu
