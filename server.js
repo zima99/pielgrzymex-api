@@ -74,6 +74,11 @@ app.get('/api/seed', async (req, res) => {
   }
 });
 
+// --- TEST ---
+app.get('/api/test', (req, res) => {
+  res.send('Serwer dziala i widzi zmiany! Wersja 2.0');
+});
+
 // --- URUCHOMIENIE SERWERA ---
 app.listen(PORT, () => {
   console.log(`🚀 Serwer działa na porcie ${PORT}`);
