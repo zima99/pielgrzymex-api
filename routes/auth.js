@@ -1,26 +1,32 @@
 const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
-const bcrypt = require('bcryptjs');
-
-// Importujemy model użytkownika (upewnij się, że plik istnieje w folderze models!)
 const User = require('../models/user.model');
 
-// --- REJESTRACJA (POST /api/auth/register) ---
+// --- REJESTRACJA ---
 router.post('/register', async (req, res) => {
   try {
     const { firstName, lastName, email, password } = req.body;
 
-    console.log('📝 Próba rejestracji dla:', email);
+    console.log('📝 Próba rejestracji:', email);
 
-    // 1. Sprawdź czy user już istnieje
+    // 1. WALIDACJA HASŁA (Nowość)
+    // Min. 6 znaków, jedna duża litera, jedna cyfra, jeden znak specjalny
+    const passwordRegex = /^(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{6,}$/;
+
+    if (!passwordRegex.test(password)) {
+      return res.status(400).json({ 
+        message: 'Hasło jest za słabe. Wymagane: min. 6 znaków, duża litera, cyfra i znak specjalny.' 
+      });
+    }
+
+    // 2. Sprawdź czy user już istnieje
     const userExists = await User.findOne({ email });
     if (userExists) {
       return res.status(400).json({ message: 'Użytkownik o tym emailu już istnieje' });
     }
 
-    // 2. Stwórz nowego usera 
-    // (Hasło zahashuje się samo dzięki kodzie w user.model.js)
+    // 3. Stwórz nowego usera
     const user = await User.create({
       firstName,
       lastName,
@@ -28,7 +34,7 @@ router.post('/register', async (req, res) => {
       password
     });
 
-    // 3. Wygeneruj token i odeślij odpowiedź
+    // 4. Sukces - zwróć token
     if (user) {
       res.status(201).json({
         _id: user._id,
@@ -46,15 +52,13 @@ router.post('/register', async (req, res) => {
   }
 });
 
-// --- LOGOWANIE (POST /api/auth/login) ---
+// --- LOGOWANIE ---
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // 1. Znajdź usera po emailu
     const user = await User.findOne({ email });
 
-    // 2. Sprawdź hasło (metoda matchPassword jest zdefiniowana w modelu)
     if (user && (await user.matchPassword(password))) {
       res.json({
         _id: user._id,
@@ -67,12 +71,11 @@ router.post('/login', async (req, res) => {
     }
 
   } catch (error) {
-    console.error('❌ Błąd logowania:', error);
     res.status(500).json({ message: 'Błąd serwera: ' + error.message });
   }
 });
 
-// Funkcja pomocnicza do generowania tokena
+// Funkcja pomocnicza do tokena
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, {
     expiresIn: '30d',
