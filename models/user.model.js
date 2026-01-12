@@ -16,25 +16,31 @@ const userSchema = new mongoose.Schema({
   },
   firstName: { type: String, required: true },
   lastName: { type: String, required: true },
+  
+  // ROLA: Określa uprawnienia w systemie
   role: {
     type: String,
-    enum: ['user', 'admin'],
+    enum: ['user', 'admin'], // Usunęliśmy 'premium' stąd
     default: 'user'
   },
+
+  // PREMIUM: Osobna flaga, niezależna od roli
+  isPremium: {
+    type: Boolean,
+    default: false
+  },
+
   createdAt: { type: Date, default: Date.now }
 });
 
-// 🔒 POPRAWIONE: Usunęliśmy 'next' z nawiasów i ze środka
-userSchema.pre('save', async function() {
-  // Jeśli hasło nie było zmieniane, nic nie rób
-  if (!this.isModified('password')) return;
+// ... reszta pliku bez zmian (middleware pre-save i matchPassword) ...
 
-  // Hashowanie hasła
+userSchema.pre('save', async function() {
+  if (!this.isModified('password')) return;
   const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(this.password, salt);
 });
 
-// 🔑 Metoda do sprawdzania hasła przy logowaniu
 userSchema.methods.matchPassword = async function(enteredPassword) {
   return await bcrypt.compare(enteredPassword, this.password);
 };

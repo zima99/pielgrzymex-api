@@ -14,22 +14,42 @@ router.get('/users', protect, admin, async (req, res) => {
   }
 });
 
+router.get('/users/:id', protect, admin, async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id).select('-password');
+    if (user) {
+      res.json(user);
+    } else {
+      res.status(404).json({ message: 'Nie znaleziono użytkownika' });
+    }
+  } catch (error) {
+    res.status(500).json({ message: 'Błąd serwera' });
+  }
+});
 // --- 2. EDYTUJ UŻYTKOWNIKA (PUT /api/admin/users/:id) ---
-// Służy do zmiany roli (np. na Premium lub Admina)
 router.put('/users/:id', protect, admin, async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
 
     if (user) {
-      // Aktualizujemy dane, jeśli zostały przesłane
-      user.role = req.body.role || user.role;
+      // Aktualizujemy podstawowe dane
       user.firstName = req.body.firstName || user.firstName;
       user.lastName = req.body.lastName || user.lastName;
+      user.email = req.body.email || user.email;
       
-      // Opcjonalnie zmiana hasła (tylko jeśli admin wpisał nowe)
+      // Rola (user/admin)
+      if (req.body.role) {
+        user.role = req.body.role;
+      }
+
+      // Premium (Boolean) - sprawdzamy czy zostało przesłane
+      if (req.body.isPremium !== undefined) {
+        user.isPremium = req.body.isPremium;
+      }
+      
+      // Zmiana hasła
       if (req.body.password) {
-          // Model user.model.js sam zahashuje hasło!
-          user.password = req.body.password;
+        user.password = req.body.password;
       }
 
       const updatedUser = await user.save();
@@ -37,8 +57,8 @@ router.put('/users/:id', protect, admin, async (req, res) => {
       res.json({
         _id: updatedUser._id,
         firstName: updatedUser.firstName,
-        email: updatedUser.email,
-        role: updatedUser.role
+        role: updatedUser.role,
+        isPremium: updatedUser.isPremium // Zwracamy info o premium
       });
     } else {
       res.status(404).json({ message: 'Użytkownik nie znaleziony' });
