@@ -63,7 +63,9 @@ router.post('/login', async (req, res) => {
       res.json({
         _id: user._id,
         firstName: user.firstName,
+        lastName: user.lastName, // Warto też zwracać nazwisko
         email: user.email,
+        role: user.role, // <--- WAŻNE: Tego brakowało! Teraz Frontend będzie widział rolę.
         token: generateToken(user._id)
       });
     } else {
