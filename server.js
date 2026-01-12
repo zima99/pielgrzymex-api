@@ -1,51 +1,44 @@
-require('dotenv').config(); // Musi być na samej górze
+require('dotenv').config(); // Musi być zawsze na samej górze
 const express = require('express');
 const mongoose = require('mongoose');
-const cors = require('cors'); // Biblioteka do obsługi zapytań z innej domeny
+const cors = require('cors');
 
-// Import tras logowania
+// IMPORT TRAS (Tutaj wskazujemy plik z logowaniem)
 const authRoutes = require('./routes/auth');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const MONGO_URI = process.env.MONGO_URI;
 
-// --- KONFIGURACJA CORS (To naprawia Twój błąd!) ---
+// --- KONFIGURACJA CORS ---
+// Pozwala frontendowi (GitHub Pages) łączyć się z backendem
 app.use(cors());
+
+// Pozwala serwerowi czytać dane JSON (niezbędne do formularzy)
 app.use(express.json());
 
 // --- POŁĄCZENIE Z BAZĄ DANYCH ---
 mongoose.connect(MONGO_URI)
   .then(() => console.log('✅ Połączono z MongoDB!'))
-  .catch(err => {
-    console.error('❌ Błąd połączenia z bazą:', err);
-    console.error('👉 Sprawdź IP Whitelist na MongoDB Atlas (0.0.0.0/0)');
-    console.error('👉 Sprawdź czy hasło w pliku .env/Render nie ma znaków specjalnych (@, :, /)');
-  });
-
-// --- MODELE (Jeśli nie masz ich w osobnych plikach) ---
-// Model Pielgrzymki (Potrzebny, żeby mapa działała)
-const pilgrimageSchema = new mongoose.Schema({
-  name: String,
-  description: String,
-  location: {
-    lat: Number,
-    lng: Number
-  },
-  date: Date,
-  price: Number,
-  imageUrl: String
-});
-// Sprawdzamy, czy model już istnieje, żeby uniknąć błędu przy restarcie
-const Pilgrimage = mongoose.models.Pilgrimage || mongoose.model('Pilgrimage', pilgrimageSchema);
-
+  .catch(err => console.error('❌ Błąd połączenia z bazą:', err));
 
 // --- TRASY (ROUTES) ---
 
-// 1. Trasy Autoryzacji (Logowanie/Rejestracja)
+// 1. Trasa Testowa (żeby sprawdzić czy serwer żyje)
+app.get('/api/test', (req, res) => {
+  res.send('Serwer działa poprawnie! Wersja 2.0');
+});
+
+// 2. Trasy Autoryzacji (Rejestracja i Logowanie)
+// To mówi: "wszystko co zaczyna się od /api/auth, wyślij do pliku auth.js"
 app.use('/api/auth', authRoutes);
 
-// 2. Trasa Pielgrzymek (Dla Mapy)
+// 3. Trasa Pielgrzymek (Prosty model dla mapy, jeśli jeszcze nie masz osobnego pliku)
+const pilgrimageSchema = new mongoose.Schema({
+  name: String, description: String, location: { lat: Number, lng: Number }, date: Date, price: Number
+});
+const Pilgrimage = mongoose.models.Pilgrimage || mongoose.model('Pilgrimage', pilgrimageSchema);
+
 app.get('/api/pielgrzymki', async (req, res) => {
   try {
     const pilgrimages = await Pilgrimage.find();
@@ -55,31 +48,7 @@ app.get('/api/pielgrzymki', async (req, res) => {
   }
 });
 
-// 3. Seedowanie bazy (Opcjonalne - do szybkiego wypełnienia danymi)
-app.get('/api/seed', async (req, res) => {
-  try {
-    const count = await Pilgrimage.countDocuments();
-    if (count > 0) return res.send('Baza już ma dane. Pomijam seedowanie.');
-
-    const sampleData = [
-      { name: 'Jasna Góra', description: 'Sanktuarium w Częstochowie', location: { lat: 50.812, lng: 19.097 }, price: 100 },
-      { name: 'Licheń', description: 'Bazylika w Licheniu', location: { lat: 52.323, lng: 18.355 }, price: 120 },
-      { name: 'Łagiewniki', description: 'Sanktuarium w Krakowie', location: { lat: 50.021, lng: 19.935 }, price: 150 }
-    ];
-    
-    await Pilgrimage.insertMany(sampleData);
-    res.send('✅ Baza zaktualizowana przykładowymi danymi!');
-  } catch (err) {
-    res.status(500).send('Błąd seedowania: ' + err.message);
-  }
-});
-
-// --- TEST ---
-app.get('/api/test', (req, res) => {
-  res.send('Serwer dziala i widzi zmiany! Wersja 2.0');
-});
-
-// --- URUCHOMIENIE SERWERA ---
+// --- START SERWERA ---
 app.listen(PORT, () => {
-  console.log(`🚀 Serwer działa na porcie ${PORT}`);
+  console.log(`🚀 Serwer nasłuchuje na porcie ${PORT}`);
 });
