@@ -2,6 +2,7 @@ require('dotenv').config(); // Musi być zawsze na samej górze
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const adminRoutes = require('./routes/adminRoutes');
 
 // IMPORT TRAS (Tutaj wskazujemy plik z logowaniem)
 const authRoutes = require('./routes/auth');
@@ -16,6 +17,7 @@ app.use(cors());
 
 // Pozwala serwerowi czytać dane JSON (niezbędne do formularzy)
 app.use(express.json());
+app.use('/api/admin', adminRoutes);
 
 // --- POŁĄCZENIE Z BAZĄ DANYCH ---
 mongoose.connect(MONGO_URI)
