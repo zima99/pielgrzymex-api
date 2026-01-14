@@ -1,10 +1,10 @@
-require('dotenv').config(); // Musi być zawsze na samej górze
+require('dotenv').config();
+const path = require('path');
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const adminRoutes = require('./routes/adminRoutes');
-
-// IMPORT TRAS (Tutaj wskazujemy plik z logowaniem)
+const tripRoutes = require('./routes/tripRoutes');
 const authRoutes = require('./routes/auth');
 
 const app = express();
@@ -18,6 +18,7 @@ app.use(cors());
 // Pozwala serwerowi czytać dane JSON (niezbędne do formularzy)
 app.use(express.json());
 app.use('/api/admin', adminRoutes);
+app.use('/api/trips', tripRoutes);
 
 // --- POŁĄCZENIE Z BAZĄ DANYCH ---
 mongoose.connect(MONGO_URI)
@@ -25,7 +26,7 @@ mongoose.connect(MONGO_URI)
   .catch(err => console.error('❌ Błąd połączenia z bazą:', err));
 
 // --- TRASY (ROUTES) ---
-
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 // 1. Trasa Testowa (żeby sprawdzić czy serwer żyje)
 app.get('/api/test', (req, res) => {
   res.send('Serwer działa poprawnie! Wersja 2.0');
