@@ -125,53 +125,43 @@ router.get('/trips/:id', protect, admin, async (req, res) => {
 
 // 8. DODAJ PIELGRZYMKĘ (Z UPLOADEM)
 // Dodajemy middleware: upload.single('image')
-router.post('/trips', protect, admin, upload.single('image'), async (req, res) => {
+router.post('/trips', upload.single('image'), async (req, res) => {
   try {
-    // Dane tekstowe przyjdą w req.body
-    // Plik przyjdzie w req.file
-    
-    // Parsowanie kategorii (bo FormData przesyła tablice jako tekst)
-    let categories = [];
-    if (req.body.categories) {
-      try {
-        categories = JSON.parse(req.body.categories);
-      } catch (e) {
-        categories = [req.body.categories];
-      }
-    }
-
-    // Budowanie ścieżki do zdjęcia (jeśli przesłano)
-    // UWAGA: Dopasuj 'http://localhost:3000' do swojego adresu
+    // 1. Przygotuj link do zdjęcia (jeśli zostało wgrane)
+    // UWAGA: Upewnij się, że adres domeny jest poprawny!
     const imageUrl = req.file 
-      ? `http://pielgrzymex-api.onrender.com/${req.file.filename}` 
+      ? `https://pielgrzymex-api.onrender.com/uploads/${req.file.filename}` 
       : '';
 
-    const trip = await Trip.create({
+    // 2. Zdefiniuj obiekt tripData (Tego brakowało!)
+    const tripData = {
       name: req.body.name,
-      startLocation: req.body.startLocation,
-      destination: req.body.destination,
+      description: req.body.description,
+      price: req.body.price,
       startDate: req.body.startDate,
       endDate: req.body.endDate,
-      price: req.body.price,
-      type: req.body.type,
-      spots: req.body.spots || 50,
-      description: req.body.description || '',
-      categories: categories,
-      imageUrl: imageUrl // 👈 Zapisujemy link do pliku
-    });
+      startLocation: req.body.startLocation, // Ważne dla mapy
+      destination: req.body.destination,     // Ważne dla mapy
+      placesCount: req.body.placesCount,
+      imageUrl: imageUrl
+    };
 
-   const newTrip = new Trip(tripData);
+    // 3. Stwórz i zapisz pielgrzymkę w bazie
+    const newTrip = new Trip(tripData);
     await newTrip.save();
 
-    // 👇 NOWOŚĆ: OD RAZU ZAPISUJEMY LOKALIZACJE DO BAZY
-    // Używamy Promise.all, żeby robić to równolegle
-    await Promise.all([
-      saveLocationToDb(req.body.startLocation),
-      saveLocationToDb(req.body.destination)
-    ]);
+    // 4. AUTOMATYCZNY ZAPIS LOKALIZACJI (Dla mapy)
+    // To dzieje się w tle, żeby uzupełnić bazę współrzędnych
+    if (req.body.startLocation) {
+        await saveLocationToDb(req.body.startLocation);
+    }
+    if (req.body.destination) {
+        await saveLocationToDb(req.body.destination);
+    }
 
     res.status(201).json(newTrip);
   } catch (error) {
+    console.error("Błąd dodawania pielgrzymki:", error);
     res.status(500).json({ message: error.message });
   }
 });
