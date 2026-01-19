@@ -136,6 +136,7 @@ router.post('/trips', upload.single('image'), async (req, res) => {
     // 2. Zdefiniuj obiekt tripData (Tego brakowało!)
     const tripData = {
       name: req.body.name,
+      type: req.body.type,
       description: req.body.description,
       price: req.body.price,
       startDate: req.body.startDate,
