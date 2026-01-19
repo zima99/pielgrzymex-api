@@ -5,6 +5,7 @@ const Trip = require('../models/trip.model');
 const multer = require('multer');
 const path = require('path');
 const { protect, admin } = require('../middleware/authMiddleware');
+const { saveLocationToDb } = require('../utils/geoHelper');
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -159,10 +160,19 @@ router.post('/trips', protect, admin, upload.single('image'), async (req, res) =
       imageUrl: imageUrl // 👈 Zapisujemy link do pliku
     });
 
-    res.status(201).json(trip);
+   const newTrip = new Trip(tripData);
+    await newTrip.save();
+
+    // 👇 NOWOŚĆ: OD RAZU ZAPISUJEMY LOKALIZACJE DO BAZY
+    // Używamy Promise.all, żeby robić to równolegle
+    await Promise.all([
+      saveLocationToDb(req.body.startLocation),
+      saveLocationToDb(req.body.destination)
+    ]);
+
+    res.status(201).json(newTrip);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Błąd dodawania: ' + error.message });
+    res.status(500).json({ message: error.message });
   }
 });
 
@@ -190,13 +200,15 @@ router.put('/trips/:id', protect, admin, upload.single('image'), async (req, res
            // Ignoruj błędy parsowania, zostaw stare lub potraktuj jako string
         }
       }
-
+      if (req.body.startLocation) await saveLocationToDb(req.body.startLocation);
+      if (req.body.destination) await saveLocationToDb(req.body.destination);
       // Zdjęcie - aktualizujemy TYLKO jeśli przesłano nowe
       if (req.file) {
         trip.imageUrl = `http://pielgrzymex-api.onrender.com/${req.file.filename}`;
       }
 
-      const updatedTrip = await trip.save();
+      const updatedTrip = await Trip.findByIdAndUpdate(req.params.id, { ...req.body }, { new: true });
+    res.json(updatedTrip);
       res.json(updatedTrip);
     } else {
       res.status(404).json({ message: 'Nie znaleziono pielgrzymki' });
