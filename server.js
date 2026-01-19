@@ -6,6 +6,7 @@ const cors = require('cors');
 const adminRoutes = require('./routes/adminRoutes');
 const tripRoutes = require('./routes/tripRoutes');
 const authRoutes = require('./routes/auth');
+const locationRoutes = require('./routes/locationRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -19,6 +20,7 @@ app.use(cors());
 app.use(express.json());
 app.use('/api/admin', adminRoutes);
 app.use('/api/trips', tripRoutes);
+app.use('/api/locations', locationRoutes);
 
 // --- POŁĄCZENIE Z BAZĄ DANYCH ---
 mongoose.connect(MONGO_URI)
