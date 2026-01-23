@@ -1,80 +1,163 @@
+require('dotenv').config(); // Ładuje zmienne środowiskowe (MONGO_URI)
 const mongoose = require('mongoose');
-const dotenv = require('dotenv');
-const Trip = require('./models/trip.model'); // Upewnij się, że ścieżka do modelu jest poprawna
+const Trip = require('./models/trip.model');
+const Location = require('./models/location.model');
 
-// Ładujemy zmienne środowiskowe (żeby mieć dostęp do bazy danych)
-dotenv.config();
+// --- BAZA DANYCH DO GENEROWANIA ---
 
-// Połączenie z bazą
-mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log('✅ Połączono z MongoDB'))
-  .catch((err) => {
-    console.error('❌ Błąd połączenia:', err);
-    process.exit(1);
-  });
-
-// DANE DO GENEROWANIA LOSOWYCH NAZW
-const prefixes = ['Śladami', 'Sanktuaria', 'Tajemnice', 'Duchowa Podróż do', 'Wyprawa do', 'Weekend w'];
-const places = [
-  'Częstochowy', 'Lichenia', 'Gietrzwałdu', 'Rzymu', 'Fatimy', 
-  'Lourdes', 'Ziemi Świętej', 'Santiago de Compostela', 'Asyżu', 'Medyjugorie', 
-  'Wilna', 'Krakowa', 'Łagiewnik', 'Wadowic'
+const images = [
+  'https://images.unsplash.com/photo-1519904981063-b0cf448d479e?auto=format&fit=crop&w=800&q=80',
+  'https://images.unsplash.com/photo-1548625361-1c52136e0d4c?auto=format&fit=crop&w=800&q=80',
+  'https://images.unsplash.com/photo-1552832230-c0197dd311b5?auto=format&fit=crop&w=800&q=80',,
+  'https://images.unsplash.com/photo-1526894083321-cf5e38d72836?auto=format&fit=crop&w=800&q=80'
 ];
-const transportTypes = ['autokarowa', 'samolotowa', 'piesza', 'rowerowa', 'inna'];
-const categoriesList = ['Młodzieżowa', 'Dla dorosłych', 'Rodzinna', 'Dla seniorów', 'Stanowa'];
 
-// Funkcja generująca losową liczbę
-const randomInt = (min, max) => Math.floor(Math.random() * (max - min + 1) + min);
+// Miasta Polskie (Start i Cel)
+const polishCities = [
+  { name: 'Warszawa', lat: 52.2297, lng: 21.0122, country: 'Polska' },
+  { name: 'Kraków', lat: 50.0647, lng: 19.9450, country: 'Polska' },
+  { name: 'Gdańsk', lat: 54.3520, lng: 18.6466, country: 'Polska' },
+  { name: 'Poznań', lat: 52.4064, lng: 16.9252, country: 'Polska' },
+  { name: 'Wrocław', lat: 51.1079, lng: 17.0385, country: 'Polska' },
+  { name: 'Częstochowa', lat: 50.8118, lng: 19.1203, country: 'Polska' },
+  { name: 'Zakopane', lat: 49.2992, lng: 19.9496, country: 'Polska' },
+  { name: 'Licheń Stary', lat: 52.3236, lng: 18.3551, country: 'Polska' },
+  { name: 'Gniezno', lat: 52.5348, lng: 17.5826, country: 'Polska' },
+  { name: 'Lublin', lat: 51.2465, lng: 22.5684, country: 'Polska' }
+];
 
-const importData = async () => {
+// Miasta Zagraniczne (Tylko Cel)
+const foreignCities = [
+  { name: 'Rzym', lat: 41.9028, lng: 12.4964, country: 'Włochy' },
+  { name: 'Fatima', lat: 39.6172, lng: -8.6521, country: 'Portugalia' },
+  { name: 'Lourdes', lat: 43.0915, lng: -0.0457, country: 'Francja' },
+  { name: 'Jerozolima', lat: 31.7683, lng: 35.2137, country: 'Izrael' },
+  { name: 'Santiago de Compostela', lat: 42.8782, lng: -8.5448, country: 'Hiszpania' },
+  { name: 'Medyjugorie', lat: 43.1932, lng: 17.6766, country: 'Bośnia i Hercegowina' },
+  { name: 'Wilno', lat: 54.6872, lng: 25.2797, country: 'Litwa' },
+  { name: 'Asyż', lat: 43.0707, lng: 12.6196, country: 'Włochy' }
+];
+
+const types = ['autokarowa', 'samolotowa', 'piesza', 'rowerowa', 'inna'];
+const categoriesList = ['Młodzieżowa', 'Rodzinna', 'Dla dorosłych', 'Stanowa', 'Męska', 'Kobieca'];
+
+const descriptionsParts = [
+  "Niezapomniana podróż do korzeni wiary.",
+  "Wspaniała okazja do duchowego wyciszenia i modlitwy.",
+  "Opieka doświadczonego pilota oraz duszpasterza.",
+  "Codzienna Eucharystia w wyjątkowych miejscach kultu.",
+  "Zwiedzanie najważniejszych zabytków sakralnych regionu.",
+  "Noclegi w komfortowych hotelach z pełnym wyżywieniem.",
+  "Możliwość integracji ze wspólnotą i nawiązania nowych przyjaźni.",
+  "Program dostosowany do możliwości fizycznych uczestników.",
+  "W cenie ubezpieczenie oraz wszystkie opłaty klimatyczne.",
+  "Przejazd komfortowym autokarem klasy LUX lub przelot rejsowy."
+];
+
+// --- FUNKCJE POMOCNICZE ---
+
+function getRandomElement(arr) {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+function getRandomInt(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function generateDescription() {
+  // Losujemy 3 do 5 zdań
+  const count = getRandomInt(3, 5);
+  const shuffled = descriptionsParts.sort(() => 0.5 - Math.random());
+  return shuffled.slice(0, count).join(' ');
+}
+
+function getRandomDate(startOffsetDays, durationDays) {
+  const start = new Date();
+  start.setDate(start.getDate() + startOffsetDays);
+  
+  const end = new Date(start);
+  end.setDate(end.getDate() + durationDays);
+  
+  return { start, end };
+}
+
+// --- GŁÓWNA LOGIKA ---
+
+const seedDB = async () => {
   try {
-    // Opcjonalnie: Wyczyść stare dane (odkomentuj jeśli chcesz usunąć obecne pielgrzymki przed dodaniem nowych)
-    // await Trip.deleteMany();
-    // console.log('🗑️ Wyczyszczono stare dane...');
+    console.log('🔌 Łączenie z bazą danych...');
+    await mongoose.connect(process.env.MONGO_URI);
+    console.log('✅ Połączono.');
 
-    const trips = [];
+    // 1. CZYSZCZENIE BAZY
+    console.log('🗑️ Usuwanie starych danych...');
+    await Trip.deleteMany({});
+    await Location.deleteMany({});
 
-    for (let i = 0; i < 50; i++) {
-      const type = transportTypes[randomInt(0, transportTypes.length - 1)];
-      const place = places[randomInt(0, places.length - 1)];
+    const tripsToInsert = [];
+    const locationsToInsert = new Map(); // Używamy Map, żeby nie dublować miast
+
+    // 2. GENEROWANIE 50 WYCIECZEK
+    console.log('🏭 Generowanie 70 nowych pielgrzymek...');
+    
+    for (let i = 0; i < 70; i++) {
+      // Losujemy start (zawsze Polska)
+      const startCity = getRandomElement(polishCities);
       
-      // Generowanie dat (przyszłość)
-      const start = new Date();
-      start.setDate(start.getDate() + randomInt(10, 365)); // Za 10-365 dni
-      const end = new Date(start);
-      end.setDate(end.getDate() + randomInt(3, 14)); // Czas trwania 3-14 dni
+      // Losujemy cel (50% szans na Polskę, 50% na Zagranicę)
+      const isForeign = Math.random() > 0.5;
+      const destCity = isForeign ? getRandomElement(foreignCities) : getRandomElement(polishCities);
 
-      // Losowe zdjęcie z internetu (Lorem Picsum)
-      // Dodajemy losowy parametr ?random=... żeby zdjęcia były różne
-      const imageUrl = `https://picsum.photos/800/600?random=${i}`;
+      // Zapobiegamy wycieczce z Warszawy do Warszawy
+      if (startCity.name === destCity.name) {
+        i--; continue;
+      }
 
+      // Dodajemy lokalizacje do mapy (jeśli jeszcze ich nie ma)
+      locationsToInsert.set(startCity.name, { name: startCity.name, lat: startCity.lat, lng: startCity.lng });
+      locationsToInsert.set(destCity.name, { name: destCity.name, lat: destCity.lat, lng: destCity.lng });
+
+      // Daty
+      const duration = getRandomInt(2, 14);
+      const daysUntilStart = getRandomInt(5, 180); // Wyjazdy od za 5 dni do pół roku
+      const { start, end } = getRandomDate(daysUntilStart, duration);
+
+      // Budowanie obiektu
       const trip = {
-        name: `${prefixes[randomInt(0, prefixes.length - 1)]} ${place}`,
-        startLocation: 'Warszawa', // Możesz też losować miasta
-        destination: place.replace('Częstochowy', 'Częstochowa').replace('Rzymu', 'Rzym').replace('Lichenia', 'Licheń'), // Prosta korekta gramatyczna (nieidealna, ale wystarczy)
+        name: `Pielgrzymka do: ${destCity.name}`,
+        type: getRandomElement(types),
+        description: generateDescription(),
+        price: getRandomInt(200, 5000), // Ceny od 200 do 5000 zł
         startDate: start,
         endDate: end,
-        price: randomInt(400, 5000),
-        type: type,
-        spots: randomInt(20, 60),
-        description: `Zapraszamy na wyjątkową pielgrzymkę. To będzie niezapomniany czas modlitwy i zwiedzania. Zapewniamy opiekę duszpasterza i przewodnika.`,
-        categories: [
-          categoriesList[randomInt(0, categoriesList.length - 1)],
-          categoriesList[randomInt(0, categoriesList.length - 1)]
-        ],
-        imageUrl: imageUrl
+        startLocation: startCity.name,
+        destination: destCity.name,
+        country: destCity.country, // 👈 WAŻNE dla filtrów!
+        placesCount: getRandomInt(0, 55), // 0 to wyprzedane
+        categories: [getRandomElement(categoriesList), getRandomElement(categoriesList)], // 2 losowe kategorie
+        imageUrl: getRandomElement(images),
+        spots: 55 // Maks miejsc
       };
 
-      trips.push(trip);
+      tripsToInsert.push(trip);
     }
 
-    await Trip.insertMany(trips);
-    console.log('✅ Dodano 50 losowych pielgrzymek!');
+    // 3. ZAPIS DO BAZY
+    await Trip.insertMany(tripsToInsert);
+    console.log(`✅ Dodano ${tripsToInsert.length} pielgrzymek.`);
+
+    // Zapis lokalizacji dla mapy
+    const locsArray = Array.from(locationsToInsert.values());
+    await Location.insertMany(locsArray);
+    console.log(`✅ Dodano ${locsArray.length} punktów na mapie.`);
+
+    console.log('🎉 ZAKOŃCZONO SUKCESEM!');
     process.exit();
-  } catch (error) {
-    console.error('❌ Błąd:', error);
+
+  } catch (err) {
+    console.error('❌ Błąd:', err);
     process.exit(1);
   }
 };
 
-importData();
+seedDB();
