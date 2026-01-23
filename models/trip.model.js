@@ -4,6 +4,7 @@ const tripSchema = mongoose.Schema({
   name: { type: String, required: true },
   startLocation: { type: String, required: true },
   destination: { type: String, required: true },
+  country: { type: String, default: 'Polska' },
   startDate: { type: Date, required: true },
   endDate: { type: Date, required: true },
   price: { type: Number, required: true },
