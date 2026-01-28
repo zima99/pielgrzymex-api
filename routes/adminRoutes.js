@@ -4,21 +4,34 @@ const User = require('../models/user.model');
 const Trip = require('../models/trip.model');
 const multer = require('multer');
 const path = require('path');
-const { protect, admin } = require('../middleware/authMiddleware');
-// 👇 ZMIANA: Importujemy nową funkcję getGeoData zamiast saveLocationToDb
-const { getGeoData } = require('../utils/geoHelper');
 
+// 👇 Teraz to zadziała poprawnie dzięki zmianom w authMiddleware.js
+const { protect, admin } = require('../middleware/authMiddleware');
+
+// Jeśli nie masz pliku geoHelper, zakomentuj tę linię tymczasowo, żeby nie blokowała startu:
+// const { getGeoData } = require('../utils/geoHelper');
+// Zaślepka, jeśli plik geoHelper nie istnieje (żeby serwer wstał):
+let getGeoData = async () => null;
+try {
+  const geo = require('../utils/geoHelper');
+  getGeoData = geo.getGeoData;
+} catch (e) {
+  console.log("⚠️ Ostrzeżenie: Brak pliku utils/geoHelper.js - geolokalizacja wyłączona.");
+}
+
+
+// --- KONFIGURACJA UPLOADU ---
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, 'uploads/'); // Folder docelowy
+    // Upewnij się, że folder 'uploads/' istnieje w głównym katalogu!
+    cb(null, 'uploads/'); 
   },
   filename: (req, file, cb) => {
-    // Unikalna nazwa pliku: data + oryginał
     cb(null, Date.now() + path.extname(file.originalname));
   }
 });
-
 const upload = multer({ storage: storage });
+
 
 // ==========================================
 // UŻYTKOWNICY
@@ -38,11 +51,8 @@ router.get('/users', protect, admin, async (req, res) => {
 router.get('/users/:id', protect, admin, async (req, res) => {
   try {
     const user = await User.findById(req.params.id).select('-password');
-    if (user) {
-      res.json(user);
-    } else {
-      res.status(404).json({ message: 'Nie znaleziono użytkownika' });
-    }
+    if (user) res.json(user);
+    else res.status(404).json({ message: 'Nie znaleziono użytkownika' });
   } catch (error) {
     res.status(500).json({ message: 'Błąd serwera' });
   }
@@ -105,6 +115,7 @@ router.delete('/users/:id', protect, admin, async (req, res) => {
   }
 });
 
+
 // ==========================================
 // PIELGRZYMKI
 // ==========================================
@@ -130,32 +141,27 @@ router.get('/trips/:id', protect, admin, async (req, res) => {
   }
 });
 
-// 8. DODAJ PIELGRZYMKĘ (Z UPLOADEM I GEO-LOKALIZACJĄ)
-router.post('/trips', upload.single('image'), async (req, res) => {
+// 8. DODAJ PIELGRZYMKĘ
+router.post('/trips', protect, admin, upload.single('image'), async (req, res) => {
   try {
-    // 1. Link do zdjęcia
     const imageUrl = req.file 
       ? `https://pielgrzymex-api.onrender.com/uploads/${req.file.filename}` 
       : '';
 
-    // 2. AUTOMATYCZNE WYKRYWANIE KRAJU I ZAPIS LOKALIZACJI
-    let detectedCountry = 'Polska'; // Domyślnie
+    let detectedCountry = 'Polska';
     
-    // Jeśli podano cel, sprawdź kraj i zapisz coords
-    if (req.body.destination) {
+    // Obsługa geolokalizacji tylko jeśli getGeoData jest funkcją
+    if (req.body.destination && typeof getGeoData === 'function') {
       const geoData = await getGeoData(req.body.destination);
       if (geoData && geoData.country) {
         detectedCountry = geoData.country;
-        console.log(`📍 Wykryto kraj: ${detectedCountry} (dla ${req.body.destination})`);
       }
     }
 
-    // Jeśli podano start, zapisz tylko coords (dla mapy)
-    if (req.body.startLocation) {
+    if (req.body.startLocation && typeof getGeoData === 'function') {
       await getGeoData(req.body.startLocation);
     }
 
-    // 3. Obiekt tripData
     const tripData = {
       name: req.body.name,
       type: req.body.type,
@@ -167,10 +173,9 @@ router.post('/trips', upload.single('image'), async (req, res) => {
       destination: req.body.destination,
       placesCount: req.body.placesCount,
       imageUrl: imageUrl,
-      country: detectedCountry // 👈 ZAPISUJEMY KRAJ
+      country: detectedCountry
     };
 
-    // 4. Zapis w bazie
     const newTrip = new Trip(tripData);
     await newTrip.save();
 
@@ -181,36 +186,29 @@ router.post('/trips', upload.single('image'), async (req, res) => {
   }
 });
 
-// 9. EDYTUJ PIELGRZYMKĘ (Z UPLOADEM I AKTUALIZACJĄ KRAJU)
+// 9. EDYTUJ PIELGRZYMKĘ
 router.put('/trips/:id', protect, admin, upload.single('image'), async (req, res) => {
   try {
-    // Znajdź istniejącą
     const trip = await Trip.findById(req.params.id);
     
     if (trip) {
-      // Jeśli przesłano plik, aktualizujemy link
       if (req.file) {
         req.body.imageUrl = `https://pielgrzymex-api.onrender.com/uploads/${req.file.filename}`;
       }
 
-      // --- AKTUALIZACJA GEOLOKALIZACJI ---
-      // Jeśli zmieniono destination -> sprawdź nowy kraj
-      if (req.body.destination && req.body.destination !== trip.destination) {
-         const geoData = await getGeoData(req.body.destination);
-         if (geoData && geoData.country) {
-            req.body.country = geoData.country; // Nadpisujemy kraj w obiekcie do zapisu
-         }
-      } else if (req.body.destination) {
-         // Nawet jak nazwa się nie zmieniła, warto odświeżyć coords w tabeli locations
-         await getGeoData(req.body.destination);
+      // Geolokalizacja przy edycji
+      if (typeof getGeoData === 'function') {
+          if (req.body.destination && req.body.destination !== trip.destination) {
+             const geoData = await getGeoData(req.body.destination);
+             if (geoData && geoData.country) req.body.country = geoData.country;
+          } else if (req.body.destination) {
+             await getGeoData(req.body.destination);
+          }
+          if (req.body.startLocation) {
+             await getGeoData(req.body.startLocation);
+          }
       }
 
-      if (req.body.startLocation) {
-         await getGeoData(req.body.startLocation);
-      }
-      // ------------------------------------
-
-      // Aktualizuj wszystko co przyszło w req.body
       const updatedTrip = await Trip.findByIdAndUpdate(
         req.params.id, 
         { ...req.body }, 
