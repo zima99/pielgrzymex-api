@@ -1,4 +1,4 @@
-const User = require('../models/User');
+const User = require('../models/user.model');
 const Trip = require('../models/Trip');
 // const Booking = require('../models/Booking'); // Odkomentuj, jeśli masz model Rezerwacji
 const bcrypt = require('bcryptjs');

@@ -7,6 +7,7 @@ const adminRoutes = require('./routes/adminRoutes');
 const tripRoutes = require('./routes/tripRoutes');
 const authRoutes = require('./routes/auth');
 const locationRoutes = require('./routes/locationRoutes');
+const userRoutes = require('./routes/users');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -21,6 +22,7 @@ app.use(express.json());
 app.use('/api/admin', adminRoutes);
 app.use('/api/trips', tripRoutes);
 app.use('/api/locations', locationRoutes);
+app.use('/api/users', userRoutes);
 
 // --- POŁĄCZENIE Z BAZĄ DANYCH ---
 mongoose.connect(MONGO_URI)
