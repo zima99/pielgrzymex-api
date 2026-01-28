@@ -4,34 +4,26 @@ const User = require('../models/user.model');
 const Trip = require('../models/trip.model');
 const multer = require('multer');
 const path = require('path');
+const bcrypt = require('bcryptjs'); // 👈 WAŻNE: Dodaj ten import do hashowania haseł
 
-// 👇 Teraz to zadziała poprawnie dzięki zmianom w authMiddleware.js
+// Import middleware (hybrydowy)
 const { protect, admin } = require('../middleware/authMiddleware');
 
-// Jeśli nie masz pliku geoHelper, zakomentuj tę linię tymczasowo, żeby nie blokowała startu:
-// const { getGeoData } = require('../utils/geoHelper');
-// Zaślepka, jeśli plik geoHelper nie istnieje (żeby serwer wstał):
+// Geolokalizacja (zabezpieczona)
 let getGeoData = async () => null;
 try {
   const geo = require('../utils/geoHelper');
   getGeoData = geo.getGeoData;
 } catch (e) {
-  console.log("⚠️ Ostrzeżenie: Brak pliku utils/geoHelper.js - geolokalizacja wyłączona.");
+  console.log("⚠️ Geolocation disabled (missing geoHelper)");
 }
 
-
-// --- KONFIGURACJA UPLOADU ---
+// Konfiguracja Multer (zdjęcia)
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    // Upewnij się, że folder 'uploads/' istnieje w głównym katalogu!
-    cb(null, 'uploads/'); 
-  },
-  filename: (req, file, cb) => {
-    cb(null, Date.now() + path.extname(file.originalname));
-  }
+  destination: (req, file, cb) => cb(null, 'uploads/'),
+  filename: (req, file, cb) => cb(null, Date.now() + path.extname(file.originalname))
 });
 const upload = multer({ storage: storage });
-
 
 // ==========================================
 // UŻYTKOWNICY
@@ -43,18 +35,18 @@ router.get('/users', protect, admin, async (req, res) => {
     const users = await User.find({}).select('-password');
     res.json(users);
   } catch (error) {
-    res.status(500).json({ message: 'Błąd serwera' });
+    res.status(500).json({ message: 'Błąd pobierania użytkowników: ' + error.message });
   }
 });
 
-// 2. POBIERZ JEDNEGO USERA
+// 2. POBIERZ JEDNEGO
 router.get('/users/:id', protect, admin, async (req, res) => {
   try {
     const user = await User.findById(req.params.id).select('-password');
     if (user) res.json(user);
     else res.status(404).json({ message: 'Nie znaleziono użytkownika' });
   } catch (error) {
-    res.status(500).json({ message: 'Błąd serwera' });
+    res.status(500).json({ message: 'Błąd serwera: ' + error.message });
   }
 });
 
@@ -62,41 +54,76 @@ router.get('/users/:id', protect, admin, async (req, res) => {
 router.post('/users', protect, admin, async (req, res) => {
   try {
     const { firstName, lastName, email, password, role, isPremium } = req.body;
+    
     const userExists = await User.findOne({ email });
-    if (userExists) return res.status(400).json({ message: 'Użytkownik istnieje' });
+    if (userExists) return res.status(400).json({ message: 'Ten email jest już zajęty!' });
+
+    // Hashowanie hasła ręcznie dla pewności
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
 
     const user = await User.create({
-      firstName, lastName, email, password,
+      firstName, lastName, email, 
+      password: hashedPassword,
       role: role || 'user',
       isPremium: isPremium || false
     });
 
     if (user) res.status(201).json(user);
-    else res.status(400).json({ message: 'Błąd danych' });
+    else res.status(400).json({ message: 'Nie udało się utworzyć użytkownika' });
   } catch (error) {
-    res.status(500).json({ message: 'Błąd serwera: ' + error.message });
+    console.error("Błąd dodawania usera:", error);
+    res.status(500).json({ message: error.message });
   }
 });
 
-// 4. EDYTUJ USERA
+// 4. EDYTUJ USERA (TUTAJ BYŁ BŁĄD 500)
 router.put('/users/:id', protect, admin, async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
-    if (user) {
-      user.firstName = req.body.firstName || user.firstName;
-      user.lastName = req.body.lastName || user.lastName;
-      user.email = req.body.email || user.email;
-      if (req.body.role) user.role = req.body.role;
-      if (req.body.isPremium !== undefined) user.isPremium = req.body.isPremium;
-      if (req.body.password) user.password = req.body.password;
-
-      const updatedUser = await user.save();
-      res.json(updatedUser);
-    } else {
-      res.status(404).json({ message: 'Nie znaleziono użytkownika' });
+    if (!user) {
+      return res.status(404).json({ message: 'Nie znaleziono użytkownika' });
     }
+
+    // 1. Sprawdź czy nowy email nie jest zajęty przez kogoś innego
+    if (req.body.email && req.body.email !== user.email) {
+       const emailExists = await User.findOne({ email: req.body.email });
+       if (emailExists) {
+         return res.status(400).json({ message: 'Ten email jest już zajęty przez innego użytkownika!' });
+       }
+    }
+
+    // 2. Aktualizuj pola podstawowe
+    user.firstName = req.body.firstName || user.firstName;
+    user.lastName = req.body.lastName || user.lastName;
+    user.email = req.body.email || user.email;
+    
+    // Zabezpieczenie: konwertuj string "true"/"false" na boolean, jeśli przyjdzie jako string
+    if (req.body.role) user.role = req.body.role;
+    if (req.body.isPremium !== undefined) user.isPremium = req.body.isPremium;
+
+    // 3. Obsługa hasła (jeśli podano nowe)
+    if (req.body.password && req.body.password.length >= 6) {
+       const salt = await bcrypt.genSalt(10);
+       user.password = await bcrypt.hash(req.body.password, salt);
+    }
+
+    // 4. Zapis
+    const updatedUser = await user.save();
+    
+    res.json({
+      _id: updatedUser._id,
+      firstName: updatedUser.firstName,
+      lastName: updatedUser.lastName,
+      email: updatedUser.email,
+      role: updatedUser.role,
+      isPremium: updatedUser.isPremium
+    });
+
   } catch (error) {
-    res.status(500).json({ message: 'Błąd edycji' });
+    console.error("❌ Błąd edycji usera (Backend):", error);
+    // 👇 TERAZ ZOBACZYSZ PRAWDZIWY BŁĄD W PRZEGLĄDARCE!
+    res.status(500).json({ message: error.message || 'Błąd edycji danych' });
   }
 });
 
@@ -106,12 +133,12 @@ router.delete('/users/:id', protect, admin, async (req, res) => {
     const user = await User.findById(req.params.id);
     if (user) {
       await user.deleteOne();
-      res.json({ message: 'Usunięto' });
+      res.json({ message: 'Użytkownik usunięty' });
     } else {
-      res.status(404).json({ message: 'Nie znaleziono' });
+      res.status(404).json({ message: 'Nie znaleziono użytkownika' });
     }
   } catch (error) {
-    res.status(500).json({ message: 'Błąd usuwania' });
+    res.status(500).json({ message: error.message });
   }
 });
 
@@ -120,28 +147,25 @@ router.delete('/users/:id', protect, admin, async (req, res) => {
 // PIELGRZYMKI
 // ==========================================
 
-// 6. POBIERZ WSZYSTKIE
 router.get('/trips', protect, admin, async (req, res) => {
   try {
     const trips = await Trip.find({}).sort({ _id: 1 });
     res.json(trips);
   } catch (error) {
-    res.status(500).json({ message: 'Błąd pobierania' });
+    res.status(500).json({ message: error.message });
   }
 });
 
-// 7. POBIERZ JEDNĄ
 router.get('/trips/:id', protect, admin, async (req, res) => {
   try {
     const trip = await Trip.findById(req.params.id);
     if (trip) res.json(trip);
     else res.status(404).json({ message: 'Nie znaleziono pielgrzymki' });
   } catch (error) {
-    res.status(500).json({ message: 'Błąd serwera' });
+    res.status(500).json({ message: error.message });
   }
 });
 
-// 8. DODAJ PIELGRZYMKĘ
 router.post('/trips', protect, admin, upload.single('image'), async (req, res) => {
   try {
     const imageUrl = req.file 
@@ -149,17 +173,20 @@ router.post('/trips', protect, admin, upload.single('image'), async (req, res) =
       : '';
 
     let detectedCountry = 'Polska';
-    
-    // Obsługa geolokalizacji tylko jeśli getGeoData jest funkcją
     if (req.body.destination && typeof getGeoData === 'function') {
       const geoData = await getGeoData(req.body.destination);
-      if (geoData && geoData.country) {
-        detectedCountry = geoData.country;
-      }
+      if (geoData?.country) detectedCountry = geoData.country;
     }
-
     if (req.body.startLocation && typeof getGeoData === 'function') {
       await getGeoData(req.body.startLocation);
+    }
+
+    // Parsowanie kategorii (bo z FormData przychodzą jako string JSON)
+    let categories = [];
+    if (req.body.categories) {
+      try {
+        categories = JSON.parse(req.body.categories);
+      } catch(e) { categories = []; }
     }
 
     const tripData = {
@@ -173,58 +200,59 @@ router.post('/trips', protect, admin, upload.single('image'), async (req, res) =
       destination: req.body.destination,
       placesCount: req.body.placesCount,
       imageUrl: imageUrl,
-      country: detectedCountry
+      country: detectedCountry,
+      categories: categories // Dodajemy kategorie
     };
 
     const newTrip = new Trip(tripData);
     await newTrip.save();
-
     res.status(201).json(newTrip);
   } catch (error) {
-    console.error("Błąd dodawania pielgrzymki:", error);
+    console.error("Błąd dodawania tripu:", error);
     res.status(500).json({ message: error.message });
   }
 });
 
-// 9. EDYTUJ PIELGRZYMKĘ
 router.put('/trips/:id', protect, admin, upload.single('image'), async (req, res) => {
   try {
     const trip = await Trip.findById(req.params.id);
-    
-    if (trip) {
-      if (req.file) {
-        req.body.imageUrl = `https://pielgrzymex-api.onrender.com/uploads/${req.file.filename}`;
-      }
+    if (!trip) return res.status(404).json({ message: 'Nie znaleziono pielgrzymki' });
 
-      // Geolokalizacja przy edycji
-      if (typeof getGeoData === 'function') {
-          if (req.body.destination && req.body.destination !== trip.destination) {
-             const geoData = await getGeoData(req.body.destination);
-             if (geoData && geoData.country) req.body.country = geoData.country;
-          } else if (req.body.destination) {
-             await getGeoData(req.body.destination);
-          }
-          if (req.body.startLocation) {
-             await getGeoData(req.body.startLocation);
-          }
-      }
-
-      const updatedTrip = await Trip.findByIdAndUpdate(
-        req.params.id, 
-        { ...req.body }, 
-        { new: true }
-      );
-      
-      res.json(updatedTrip);
-    } else {
-      res.status(404).json({ message: 'Nie znaleziono pielgrzymki' });
+    if (req.file) {
+      req.body.imageUrl = `https://pielgrzymex-api.onrender.com/uploads/${req.file.filename}`;
     }
+
+    // Geolokalizacja
+    if (typeof getGeoData === 'function') {
+        if (req.body.destination && req.body.destination !== trip.destination) {
+           const geoData = await getGeoData(req.body.destination);
+           if (geoData?.country) req.body.country = geoData.country;
+        } else if (req.body.destination) {
+           await getGeoData(req.body.destination);
+        }
+        if (req.body.startLocation) await getGeoData(req.body.startLocation);
+    }
+
+    // Parsowanie kategorii
+    if (req.body.categories) {
+      try {
+        req.body.categories = JSON.parse(req.body.categories);
+      } catch(e) { /* ignoruj błąd parsowania */ }
+    }
+
+    const updatedTrip = await Trip.findByIdAndUpdate(
+      req.params.id, 
+      { ...req.body }, 
+      { new: true, runValidators: true }
+    );
+    
+    res.json(updatedTrip);
   } catch (error) {
-    res.status(500).json({ message: 'Błąd edycji: ' + error.message });
+    console.error("Błąd edycji tripu:", error);
+    res.status(500).json({ message: error.message });
   }
 });
 
-// 10. USUŃ
 router.delete('/trips/:id', protect, admin, async (req, res) => {
   try {
     const trip = await Trip.findById(req.params.id);
@@ -235,7 +263,7 @@ router.delete('/trips/:id', protect, admin, async (req, res) => {
       res.status(404).json({ message: 'Nie znaleziono' });
     }
   } catch (error) {
-    res.status(500).json({ message: 'Błąd usuwania' });
+    res.status(500).json({ message: error.message });
   }
 });
 
