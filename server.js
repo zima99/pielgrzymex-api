@@ -3,6 +3,7 @@ const path = require('path');
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const authRoutes = require('./routes/auth');
 const adminRoutes = require('./routes/adminRoutes');
 const tripRoutes = require('./routes/tripRoutes');
 const authRoutes = require('./routes/auth');
@@ -19,6 +20,7 @@ app.use(cors());
 
 // Pozwala serwerowi czytać dane JSON (niezbędne do formularzy)
 app.use(express.json());
+app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/trips', tripRoutes);
 app.use('/api/locations', locationRoutes);

@@ -1,11 +1,14 @@
+// backend/routes/users.js
 const express = require('express');
 const router = express.Router();
 const userController = require('../controllers/userController');
-const auth = require('../middleware/auth'); // Twój middleware sprawdzający token JWT
+// Upewnij się, że ścieżka do middleware jest poprawna. 
+// W Twoim kodzie widziałem authMiddleware.js w folderze middleware.
+const auth = require('../middleware/authMiddleware'); 
 
-// Profil
+// Profil (Pobieranie i Edycja)
 router.get('/profile', auth, userController.getProfile);
-router.put('/profile', auth, userController.updateProfile);
+router.put('/profile', auth, userController.updateProfile); // 👈 To jest kluczowe dla zapisu!
 
 // Hasło
 router.put('/change-password', auth, userController.changePassword);
