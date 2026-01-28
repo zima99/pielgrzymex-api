@@ -7,9 +7,10 @@ const Location = require('./models/location.model');
 
 const images = [
   'https://images.unsplash.com/photo-1519904981063-b0cf448d479e?auto=format&fit=crop&w=800&q=80',
-  'https://images.unsplash.com/photo-1548625361-1c52136e0d4c?auto=format&fit=crop&w=800&q=80',
-  'https://images.unsplash.com/photo-1552832230-c0197dd311b5?auto=format&fit=crop&w=800&q=80',,
-  'https://images.unsplash.com/photo-1526894083321-cf5e38d72836?auto=format&fit=crop&w=800&q=80'
+  'https://images.unsplash.com/photo-1552832230-c0197dd311b5?auto=format&fit=crop&w=800&q=80',
+  'https://images.unsplash.com/photo-1768463852068-cc277b8baf35?q=80&w=1170&auto=format&fit=crop&w=800&q=80',
+  'https://images.unsplash.com/photo-1768325400062-2b63fec226c3?q=80&w=1175&auto=format&fit=crop&w=800&q=80',
+  'https://images.unsplash.com/photo-1768590342558-665aa861ed81?q=80&w=1170&auto=format&fit=crop&w=800&q=80'
 ];
 
 // Miasta Polskie (Start i Cel)

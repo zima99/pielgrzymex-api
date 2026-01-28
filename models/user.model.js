@@ -20,7 +20,7 @@ const userSchema = new mongoose.Schema({
   // ROLA: Określa uprawnienia w systemie
   role: {
     type: String,
-    enum: ['user', 'admin'], // Usunęliśmy 'premium' stąd
+    enum: ['user', 'admin'],
     default: 'user'
   },
 
@@ -30,17 +30,27 @@ const userSchema = new mongoose.Schema({
     default: false
   },
 
+  // 👇 NOWOŚĆ: Lista ulubionych (referencja do modelu 'Trip')
+  favorites: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Trip' 
+  }],
+
   createdAt: { type: Date, default: Date.now }
 });
 
-// ... reszta pliku bez zmian (middleware pre-save i matchPassword) ...
+// --- Poniżej Twój oryginalny kod (Middleware i Metody) ---
 
-userSchema.pre('save', async function() {
-  if (!this.isModified('password')) return;
+// Szyfrowanie hasła przed zapisem
+userSchema.pre('save', async function(next) {
+  if (!this.isModified('password')) return next(); // Dodano next() dla poprawności
+  
   const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(this.password, salt);
+  next();
 });
 
+// Metoda do sprawdzania hasła przy logowaniu
 userSchema.methods.matchPassword = async function(enteredPassword) {
   return await bcrypt.compare(enteredPassword, this.password);
 };
