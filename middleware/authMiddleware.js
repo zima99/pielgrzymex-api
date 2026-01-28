@@ -1,33 +1,25 @@
 const jwt = require('jsonwebtoken');
-const User = require('../models/user.model');
 
-// 1. Sprawdza czy użytkownik jest zalogowany (ma token)
-const protect = async (req, res, next) => {
-  let token;
+module.exports = function(req, res, next) {
+  // 1. Pobierz token z nagłówka
+  const token = req.header('Authorization')?.replace('Bearer ', '');
 
-  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
-    try {
-      token = req.headers.authorization.split(' ')[1]; // Usuwamy "Bearer "
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      
-      // Znajdź użytkownika w bazie (bez hasła)
-      req.user = await User.findById(decoded.id).select('-password');
-      next();
-    } catch (error) {
-      res.status(401).json({ message: 'Nieautoryzowany, błędny token' });
-    }
-  } else {
-    res.status(401).json({ message: 'Brak autoryzacji, brak tokena' });
+  // 2. Sprawdź czy token istnieje
+  if (!token) {
+    return res.status(401).json({ message: 'Brak tokenu, autoryzacja odmówiona' });
   }
-};
 
-// 2. Sprawdza czy użytkownik jest ADMINEM
-const admin = (req, res, next) => {
-  if (req.user && req.user.role === 'admin') {
+  try {
+    // 3. Zweryfikuj token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    
+    // 4. Dodaj użytkownika do requestu (req.user)
+    req.user = decoded;
+    
+    // 5. Przejdź dalej
     next();
-  } else {
-    res.status(403).json({ message: 'Brak uprawnień administratora!' });
+  } catch (err) {
+    console.error("Błąd weryfikacji tokenu:", err.message);
+    res.status(401).json({ message: 'Token jest nieprawidłowy' });
   }
 };
-
-module.exports = { protect, admin };
