@@ -77,52 +77,52 @@ router.post('/users', protect, admin, async (req, res) => {
   }
 });
 
-// 4. EDYTUJ USERA (TUTAJ BYŁ BŁĄD 500)
+// 4. EDYTUJ USERA (POPRAWKA: Używamy findByIdAndUpdate zamiast save())
 router.put('/users/:id', protect, admin, async (req, res) => {
   try {
-    const user = await User.findById(req.params.id);
-    if (!user) {
+    const { firstName, lastName, email, role, isPremium, password } = req.body;
+
+    // 1. Sprawdź czy użytkownik istnieje
+    const userToCheck = await User.findById(req.params.id);
+    if (!userToCheck) {
       return res.status(404).json({ message: 'Nie znaleziono użytkownika' });
     }
 
-    // 1. Sprawdź czy nowy email nie jest zajęty przez kogoś innego
-    if (req.body.email && req.body.email !== user.email) {
-       const emailExists = await User.findOne({ email: req.body.email });
+    // 2. Sprawdź duplikat emaila (tylko jeśli user zmienia email)
+    if (email && email !== userToCheck.email) {
+       const emailExists = await User.findOne({ email });
        if (emailExists) {
-         return res.status(400).json({ message: 'Ten email jest już zajęty przez innego użytkownika!' });
+         return res.status(400).json({ message: 'Ten email jest już zajęty!' });
        }
     }
 
-    // 2. Aktualizuj pola podstawowe
-    user.firstName = req.body.firstName || user.firstName;
-    user.lastName = req.body.lastName || user.lastName;
-    user.email = req.body.email || user.email;
-    
-    // Zabezpieczenie: konwertuj string "true"/"false" na boolean, jeśli przyjdzie jako string
-    if (req.body.role) user.role = req.body.role;
-    if (req.body.isPremium !== undefined) user.isPremium = req.body.isPremium;
+    // 3. Budujemy obiekt tylko z tymi polami, które chcemy zmienić
+    const updateData = {
+      firstName: firstName || userToCheck.firstName,
+      lastName: lastName || userToCheck.lastName,
+      email: email || userToCheck.email,
+      role: role || userToCheck.role,
+      isPremium: isPremium !== undefined ? isPremium : userToCheck.isPremium
+    };
 
-    // 3. Obsługa hasła (jeśli podano nowe)
-    if (req.body.password && req.body.password.length >= 6) {
+    // 4. Obsługa hasła (Hashujemy ręcznie, omijając hooki modelu)
+    if (password && password.length >= 6) {
        const salt = await bcrypt.genSalt(10);
-       user.password = await bcrypt.hash(req.body.password, salt);
+       updateData.password = await bcrypt.hash(password, salt);
     }
 
-    // 4. Zapis
-    const updatedUser = await user.save();
+    // 5. ATOMOWY ZAPIS (To naprawia błąd "next is not a function")
+    // findByIdAndUpdate nie uruchamia pre('save'), więc błąd znika.
+    const updatedUser = await User.findByIdAndUpdate(
+      req.params.id,
+      { $set: updateData },
+      { new: true, runValidators: true } // new: true zwraca zaktualizowany obiekt
+    ).select('-password');
     
-    res.json({
-      _id: updatedUser._id,
-      firstName: updatedUser.firstName,
-      lastName: updatedUser.lastName,
-      email: updatedUser.email,
-      role: updatedUser.role,
-      isPremium: updatedUser.isPremium
-    });
+    res.json(updatedUser);
 
   } catch (error) {
-    console.error("❌ Błąd edycji usera (Backend):", error);
-    // 👇 TERAZ ZOBACZYSZ PRAWDZIWY BŁĄD W PRZEGLĄDARCE!
+    console.error("❌ Błąd edycji usera:", error);
     res.status(500).json({ message: error.message || 'Błąd edycji danych' });
   }
 });
