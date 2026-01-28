@@ -1,35 +1,53 @@
 const jwt = require('jsonwebtoken');
+// 👇 Ważne: Importujemy model, aby sprawdzić aktualną rolę w bazie
+const User = require('../models/user.model'); 
 
-// 1. Logika weryfikacji tokenu (To co miałeś wcześniej)
-const protect = function(req, res, next) {
-  const token = req.header('Authorization')?.replace('Bearer ', '');
+// 1. Logika weryfikacji tokenu
+const protect = async function(req, res, next) {
+  let token;
+
+  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+    try {
+      // Pobierz token
+      token = req.headers.authorization.split(' ')[1];
+
+      // Zweryfikuj token
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+      // 👇 KLUCZOWA ZMIANA:
+      // Zamiast ufać temu co w tokenie, pobieramy świeżego usera z bazy!
+      // Dzięki temu mamy dostęp do pola .role, nawet jak nie było go w tokenie.
+      req.user = await User.findById(decoded.id).select('-password');
+
+      if (!req.user) {
+         return res.status(401).json({ message: 'Użytkownik z tego tokenu już nie istnieje.' });
+      }
+
+      next();
+    } catch (error) {
+      console.error("Błąd weryfikacji:", error);
+      res.status(401).json({ message: 'Nieautoryzowany, token nieprawidłowy' });
+    }
+  }
 
   if (!token) {
-    return res.status(401).json({ message: 'Brak tokenu, autoryzacja odmówiona' });
-  }
-
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded;
-    next();
-  } catch (err) {
-    console.error("Błąd weryfikacji tokenu:", err.message);
-    res.status(401).json({ message: 'Token jest nieprawidłowy' });
+    res.status(401).json({ message: 'Brak tokenu, brak autoryzacji' });
   }
 };
 
-// 2. Logika sprawdzania administratora (NOWOŚĆ - tego brakowało)
+// 2. Logika sprawdzania administratora
 const admin = function(req, res, next) {
+  // Diagnostyka w logach Rendera:
+  console.log(`👮 [ADMIN CHECK] User: ${req.user ? req.user.email : 'BRAK'} | Rola: ${req.user ? req.user.role : 'BRAK'}`);
+
   if (req.user && req.user.role === 'admin') {
-    next(); // Jest adminem, przepuść dalej
+    next(); 
   } else {
-    res.status(403).json({ message: 'Wymagane uprawnienia administratora.' });
+    res.status(403).json({ message: 'Błąd 403: Wymagane uprawnienia administratora.' });
   }
 };
 
-// 3. Eksport "Hybrydowy" (Klucz do naprawy błędu)
-// Dzięki temu działa: const auth = require(...) 
-// ORAZ działa: const { protect, admin } = require(...)
+// 3. Eksport Hybrydowy
 module.exports = protect; 
 module.exports.protect = protect;
 module.exports.admin = admin;
