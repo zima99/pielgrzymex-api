@@ -50,30 +50,50 @@ router.get('/users/:id', protect, admin, async (req, res) => {
   }
 });
 
-// 3. DODAJ USERA
+// 3. DODAJ USERA (NAPRAWIONE: Omija błąd "next is not a function")
 router.post('/users', protect, admin, async (req, res) => {
   try {
     const { firstName, lastName, email, password, role, isPremium } = req.body;
     
+    // 1. Sprawdź czy email zajęty
     const userExists = await User.findOne({ email });
     if (userExists) return res.status(400).json({ message: 'Ten email jest już zajęty!' });
 
-    // Hashowanie hasła ręcznie dla pewności
+    // 2. Hashowanie hasła (Obowiązkowe, bo omijamy model)
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    const user = await User.create({
-      firstName, lastName, email, 
+    // 3. Przygotowanie obiektu (Ręcznie, bo omijamy Mongoose)
+    const newUserObj = {
+      firstName,
+      lastName,
+      email,
       password: hashedPassword,
       role: role || 'user',
-      isPremium: isPremium || false
-    });
+      isPremium: isPremium || false,
+      isAdmin: role === 'admin', // Dla pewności
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      __v: 0 // Wersjonowanie dokumentu
+    };
 
-    if (user) res.status(201).json(user);
-    else res.status(400).json({ message: 'Nie udało się utworzyć użytkownika' });
+    // 4. BEZPOŚREDNI ZAPIS DO KOLEKCJI
+    // Używamy .collection.insertOne zamiast .create()
+    // To omija uszkodzony hook pre('save') w modelu User
+    const result = await User.collection.insertOne(newUserObj);
+
+    // 5. Zwracamy utworzonego usera
+    // result.ops to tablica wstawionych dokumentów (w starszych sterownikach)
+    // w nowszych result.insertedId to ID.
+    if (result.acknowledged) {
+       res.status(201).json({ ...newUserObj, _id: result.insertedId });
+    } else {
+       throw new Error('Nie udało się wstawić użytkownika do bazy.');
+    }
+
   } catch (error) {
-    console.error("Błąd dodawania usera:", error);
-    res.status(500).json({ message: error.message });
+    console.error("Błąd dodawania usera (Backend):", error);
+    res.status(500).json({ message: error.message || 'Błąd serwera' });
   }
 });
 
