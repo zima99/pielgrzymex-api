@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs'); // <--- DODANE: Do ręcznego szyfrowania hasła
 const User = require('../models/user.model');
 
 // --- REJESTRACJA ---
@@ -10,7 +11,7 @@ router.post('/register', async (req, res) => {
 
     console.log('📝 Próba rejestracji:', email);
 
-    // 1. WALIDACJA HASŁA (Nowość)
+    // 1. WALIDACJA HASŁA
     // Min. 6 znaków, jedna duża litera, jedna cyfra, jeden znak specjalny
     const passwordRegex = /^(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{6,}$/;
 
@@ -26,21 +27,34 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ message: 'Użytkownik o tym emailu już istnieje' });
     }
 
-    // 3. Stwórz nowego usera
-    const user = await User.create({
+    // 3. Ręczne szyfrowanie hasła (omijamy zepsuty model Mongoose)
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    // 4. Przygotowanie obiektu
+    const newUserObj = {
       firstName,
       lastName,
       email,
-      password
-    });
+      password: hashedPassword,
+      role: 'user',
+      isPremium: false,
+      isAdmin: false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      __v: 0
+    };
 
-    // 4. Sukces - zwróć token
-    if (user) {
+    // 5. Stwórz nowego usera BEZPOŚREDNIO w kolekcji
+    const result = await User.collection.insertOne(newUserObj);
+
+    // 6. Sukces - zwróć token
+    if (result.acknowledged) {
       res.status(201).json({
-        _id: user._id,
-        firstName: user.firstName,
-        email: user.email,
-        token: generateToken(user._id)
+        _id: result.insertedId,
+        firstName: newUserObj.firstName,
+        email: newUserObj.email,
+        token: generateToken(result.insertedId)
       });
     } else {
       res.status(400).json({ message: 'Nie udało się utworzyć użytkownika' });
