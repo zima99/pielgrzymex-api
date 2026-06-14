@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
-const bcrypt = require('bcryptjs'); // <--- DODANE: Do ręcznego szyfrowania hasła
+const bcrypt = require('bcryptjs');
 const User = require('../models/user.model');
 
 // --- REJESTRACJA ---
@@ -50,19 +50,20 @@ router.post('/register', async (req, res) => {
 
     // 6. Sukces - zwróć token
     if (result.acknowledged) {
-      res.status(201).json({
+      return res.status(201).json({
         _id: result.insertedId,
         firstName: newUserObj.firstName,
+        lastName: newUserObj.lastName,
         email: newUserObj.email,
-        token: generateToken(result.insertedId)
+        token: generateToken(result.insertedId.toString())
       });
     } else {
-      res.status(400).json({ message: 'Nie udało się utworzyć użytkownika' });
+      return res.status(400).json({ message: 'Nie udało się utworzyć użytkownika' });
     }
 
   } catch (error) {
     console.error('❌ Błąd rejestracji:', error);
-    res.status(500).json({ message: 'Błąd serwera: ' + error.message });
+    return res.status(500).json({ message: 'Błąd serwera: ' + error.message });
   }
 });
 
@@ -74,21 +75,21 @@ router.post('/login', async (req, res) => {
     const user = await User.findOne({ email });
 
     if (user && (await user.matchPassword(password))) {
-      res.json({
+      return res.json({
         _id: user._id,
         firstName: user.firstName,
-        lastName: user.lastName, // Warto też zwracać nazwisko
+        lastName: user.lastName, 
         email: user.email,
-        role: user.role, // <--- WAŻNE: Tego brakowało! Teraz Frontend będzie widział rolę.
+        role: user.role, 
         isPremium: user.isPremium,
         token: generateToken(user._id)
       });
     } else {
-      res.status(401).json({ message: 'Błędny email lub hasło' });
+      return res.status(401).json({ message: 'Błędny email lub hasło' });
     }
 
   } catch (error) {
-    res.status(500).json({ message: 'Błąd serwera: ' + error.message });
+    return res.status(500).json({ message: 'Błąd serwera: ' + error.message });
   }
 });
 
