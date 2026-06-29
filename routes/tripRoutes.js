@@ -43,6 +43,7 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+
 // UTWÓRZ NOWĄ OFERTĘ (DLA KONT PREMIUM / ADMINA)
 // POST /api/trips
 router.post('/', auth, async (req, res) => {
@@ -58,6 +59,26 @@ router.post('/', auth, async (req, res) => {
   } catch (error) {
     console.error('Błąd dodawania wycieczki do bazy:', error);
     return res.status(500).json({ message: 'Błąd serwera podczas dodawania oferty', error: error.message });
+  }
+});
+
+// EDYCJA PIELGRZYMKI (Tylko dla twórcy oferty lub admina)
+// PUT /api/trips/:id
+router.put('/:id', auth, async (req, res) => {
+  try {
+    const trip = await Trip.findById(req.params.id);
+    if (!trip) return res.status(404).json({ message: 'Nie znaleziono pielgrzymki' });
+
+    // Weryfikacja czy użytkownik ma prawo edytować tę wycieczkę
+    if (trip.organizer.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Brak uprawnień do edycji tej oferty' });
+    }
+
+    const updatedTrip = await Trip.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    res.json(updatedTrip);
+  } catch (error) {
+    console.error('Błąd edycji:', error);
+    res.status(500).json({ message: 'Błąd serwera podczas zapisywania zmian' });
   }
 });
 
